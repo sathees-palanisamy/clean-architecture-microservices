@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
-	"github.com/user/go-microservices/pkg/postgres"
+
 	delivery "github.com/user/go-microservices/product-service/internal/delivery/http"
 	repo "github.com/user/go-microservices/product-service/internal/infrastructure/db"
 	"github.com/user/go-microservices/product-service/internal/usecase"
@@ -27,23 +27,11 @@ func main() {
 	log.Info("Starting Product Service...")
 
 	// Config
-	dbHost := config.GetEnv("DB_HOST", "localhost")
-	dbPort := config.GetEnv("DB_PORT", "5432")
-	dbUser := config.GetEnv("DB_USER", "postgres")
-	dbPass := config.GetEnv("DB_PASSWORD", "postgres")
-	dbName := config.GetEnv("DB_NAME", "product_db")
 	serverPort := config.GetEnv("SERVER_PORT", "8081")
 
 	// DB Connection
-	dbCfg := postgres.Config{
-		Host:     dbHost,
-		Port:     dbPort,
-		User:     dbUser,
-		Password: dbPass,
-		DBName:   dbName,
-		SSLMode:  "disable",
-	}
-	dbConn, err := postgres.NewConnection(dbCfg)
+	dbConn, err := repo.NewConnection()
+
 	if err != nil {
 		log.Fatal("Could not connect to database", zap.Error(err))
 	}

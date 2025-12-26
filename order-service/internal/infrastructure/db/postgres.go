@@ -3,93 +3,84 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
-	"github.com/user/go-microservices/order-service/internal/domain"
-	pkgerrors "github.com/user/go-microservices/pkg/errors"
+	_ "github.com/lib/pq"
+	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
 	"go.uber.org/zap"
 )
 
-type postgresRepository struct {
-	db *sql.DB
-}
+// NewConnection initializes a new database connection with pooling configuration
+//
+// Configuration is read from the following environment variables:
+// - DB_DSN: Full connection string (overrides other DB_* vars if set)
+// - DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SSLMODE: Used to build DSN if DB_DSN is empty
+// - DB_MAX_OPEN_CONNS: Maximum number of open connections (default: 25)
+// - DB_MAX_IDLE_CONNS: Maximum number of idle connections (default: 25)
+// - DB_CONN_MAX_LIFETIME_MIN: Maximum lifetime of a connection in minutes (default: 15)
+// - DB_CONN_MAX_IDLE_TIME_MIN: Maximum idle time of a connection in minutes (default: 5)
+func NewConnection() (*sql.DB, error) {
+	// Read configuration
+	dsn := config.GetEnv("DB_DSN", "")
+	if dsn == "" {
+		// Fallback to separate env vars if DSN is not set
+		host := config.GetEnv("DB_HOST", "localhost")
+		port := config.GetEnv("DB_PORT", "5432")
+		user := config.GetEnv("DB_USER", "postgres")
+		pass := config.GetEnv("DB_PASSWORD", "postgres")
+		dbname := config.GetEnv("DB_NAME", "order_db")
+		sslmode := config.GetEnv("DB_SSLMODE", "disable")
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			host, port, user, pass, dbname, sslmode)
+	}
 
-func NewOrderRepository(db *sql.DB) domain.OrderRepository {
-	return &postgresRepository{db: db}
-}
-
-func (r *postgresRepository) Create(ctx context.Context, o *domain.Order) error {
-	query := `
-		INSERT INTO orders (user_id, product_id, product_name, unit_price, quantity, total_price, order_status, payment_status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id`
-
-	now := time.Now().UTC()
-	err := r.db.QueryRowContext(ctx, query,
-		o.UserID, o.ProductID, o.ProductName, o.UnitPrice, o.Quantity, o.TotalPrice,
-		o.OrderStatus, o.PaymentStatus, now,
-	).Scan(&o.ID)
-
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		logger.FromContext(ctx).Error("failed to create order", zap.Error(err))
-		return pkgerrors.ErrInternal
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
-	o.CreatedAt = now
-	return nil
+
+	// Set connection pooling settings
+	maxOpenConns := config.GetEnvInt("DB_MAX_OPEN_CONNS", 25)
+	maxIdleConns := config.GetEnvInt("DB_MAX_IDLE_CONNS", 25)
+	connMaxLifetimeMin := config.GetEnvInt("DB_CONN_MAX_LIFETIME_MIN", 15)
+	connMaxIdleTimeMin := config.GetEnvInt("DB_CONN_MAX_IDLE_TIME_MIN", 5)
+
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(time.Duration(connMaxLifetimeMin) * time.Minute)
+	db.SetConnMaxIdleTime(time.Duration(connMaxIdleTimeMin) * time.Minute)
+
+	// Context for ping
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// Start background stats logging
+	go logDBStats(db)
+
+	return db, nil
 }
 
-func (r *postgresRepository) GetByID(ctx context.Context, id int64) (*domain.Order, error) {
-	query := `SELECT id, user_id, product_id, product_name, unit_price, quantity, total_price, order_status, payment_status, created_at FROM orders WHERE id = $1`
+func logDBStats(db *sql.DB) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-	o := &domain.Order{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&o.ID, &o.UserID, &o.ProductID, &o.ProductName, &o.UnitPrice,
-		&o.Quantity, &o.TotalPrice, &o.OrderStatus, &o.PaymentStatus, &o.CreatedAt,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, pkgerrors.ErrNotFound
-	}
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to get order", zap.Error(err))
-		return nil, pkgerrors.ErrInternal
-	}
-	return o, nil
-}
-
-func (r *postgresRepository) UpdateStatus(ctx context.Context, id int64, status domain.OrderStatus, paymentStatus domain.PaymentStatus) error {
-	query := `UPDATE orders SET order_status = $1, payment_status = $2 WHERE id = $3`
-	_, err := r.db.ExecContext(ctx, query, status, paymentStatus, id)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to update order status", zap.Error(err))
-		return pkgerrors.ErrInternal
-	}
-	return nil
-}
-
-func (r *postgresRepository) GetAll(ctx context.Context) ([]*domain.Order, error) {
-	query := `SELECT id, user_id, product_id, product_name, unit_price, quantity, total_price, order_status, payment_status, created_at FROM orders`
-
-	rows, err := r.db.QueryContext(ctx, query)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to get all orders", zap.Error(err))
-		return nil, pkgerrors.ErrInternal
-	}
-	defer rows.Close()
-
-	var orders []*domain.Order
-	for rows.Next() {
-		o := &domain.Order{}
-		err := rows.Scan(
-			&o.ID, &o.UserID, &o.ProductID, &o.ProductName, &o.UnitPrice,
-			&o.Quantity, &o.TotalPrice, &o.OrderStatus, &o.PaymentStatus, &o.CreatedAt,
+	for range ticker.C {
+		stats := db.Stats()
+		// Using background context - logger should handle it if initialized globally
+		log := logger.FromContext(context.Background())
+		log.Info("DB Connection Pool Stats",
+			zap.Int("open_connections", stats.OpenConnections),
+			zap.Int("in_use", stats.InUse),
+			zap.Int("idle", stats.Idle),
+			zap.Int64("wait_count", stats.WaitCount),
+			zap.Duration("wait_duration", stats.WaitDuration),
+			zap.Int("max_open_connections", stats.MaxOpenConnections),
 		)
-		if err != nil {
-			logger.FromContext(ctx).Error("failed to scan order", zap.Error(err))
-			return nil, pkgerrors.ErrInternal
-		}
-		orders = append(orders, o)
 	}
-	return orders, nil
 }

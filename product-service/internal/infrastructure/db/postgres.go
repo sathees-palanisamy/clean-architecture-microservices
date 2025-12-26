@@ -3,140 +3,84 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
-	pkgerrors "github.com/user/go-microservices/pkg/errors"
+	_ "github.com/lib/pq"
+	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
-	"github.com/user/go-microservices/product-service/internal/domain"
 	"go.uber.org/zap"
 )
 
-type postgresRepository struct {
-	db *sql.DB
+// NewConnection initializes a new database connection with pooling configuration
+//
+// Configuration is read from the following environment variables:
+// - DB_DSN: Full connection string (overrides other DB_* vars if set)
+// - DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SSLMODE: Used to build DSN if DB_DSN is empty
+// - DB_MAX_OPEN_CONNS: Maximum number of open connections (default: 25)
+// - DB_MAX_IDLE_CONNS: Maximum number of idle connections (default: 25)
+// - DB_CONN_MAX_LIFETIME_MIN: Maximum lifetime of a connection in minutes (default: 15)
+// - DB_CONN_MAX_IDLE_TIME_MIN: Maximum idle time of a connection in minutes (default: 5)
+func NewConnection() (*sql.DB, error) {
+	// Read configuration
+	dsn := config.GetEnv("DB_DSN", "")
+	if dsn == "" {
+		// Fallback to separate env vars if DSN is not set
+		host := config.GetEnv("DB_HOST", "localhost")
+		port := config.GetEnv("DB_PORT", "5432")
+		user := config.GetEnv("DB_USER", "postgres")
+		pass := config.GetEnv("DB_PASSWORD", "postgres")
+		dbname := config.GetEnv("DB_NAME", "product_db")
+		sslmode := config.GetEnv("DB_SSLMODE", "disable")
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			host, port, user, pass, dbname, sslmode)
+	}
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
+	}
+
+	// Set connection pooling settings
+	maxOpenConns := config.GetEnvInt("DB_MAX_OPEN_CONNS", 25)
+	maxIdleConns := config.GetEnvInt("DB_MAX_IDLE_CONNS", 25)
+	connMaxLifetimeMin := config.GetEnvInt("DB_CONN_MAX_LIFETIME_MIN", 15)
+	connMaxIdleTimeMin := config.GetEnvInt("DB_CONN_MAX_IDLE_TIME_MIN", 5)
+
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(time.Duration(connMaxLifetimeMin) * time.Minute)
+	db.SetConnMaxIdleTime(time.Duration(connMaxIdleTimeMin) * time.Minute)
+
+	// Context for ping
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// Start background stats logging
+	go logDBStats(db)
+
+	return db, nil
 }
 
-func NewPostgresRepository(db *sql.DB) domain.ProductRepository {
-	return &postgresRepository{db: db}
-}
+func logDBStats(db *sql.DB) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-func (r *postgresRepository) Create(ctx context.Context, p *domain.Product) error {
-	query := `
-		INSERT INTO products (sku, name, description, price, total_qty, reserved_qty, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8)
-		RETURNING id`
-
-	now := time.Now().UTC()
-	err := r.db.QueryRowContext(ctx, query, p.SKU, p.Name, p.Description, p.Price, p.TotalQty, p.IsActive, now, now).Scan(&p.ID)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to create product", zap.Error(err))
-		return pkgerrors.ErrInternal
-	}
-	p.CreatedAt = now
-	p.UpdatedAt = now
-	return nil
-}
-
-func (r *postgresRepository) GetByID(ctx context.Context, id int64) (*domain.Product, error) {
-	query := `SELECT id, sku, name, description, price, total_qty, reserved_qty, is_active, created_at, updated_at FROM products WHERE id = $1`
-
-	p := &domain.Product{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&p.ID, &p.SKU, &p.Name, &p.Description, &p.Price,
-		&p.TotalQty, &p.ReservedQty, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, pkgerrors.ErrNotFound
-	}
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to get product", zap.Error(err))
-		return nil, pkgerrors.ErrInternal
-	}
-	return p, nil
-}
-
-func (r *postgresRepository) ReserveStock(ctx context.Context, id int64, qty int) error {
-	query := `
-		UPDATE products 
-		SET reserved_qty = reserved_qty + $1, updated_at = NOW()
-		WHERE id = $2 AND (total_qty - reserved_qty) >= $1
-	`
-	res, err := r.db.ExecContext(ctx, query, qty, id)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to reserve stock", zap.Error(err))
-		return pkgerrors.ErrInternal
-	}
-
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return pkgerrors.ErrInternal
-	}
-	if rows == 0 {
-		return pkgerrors.ErrInsufficientStock
-	}
-	return nil
-}
-
-func (r *postgresRepository) ReleaseStock(ctx context.Context, id int64, qty int) error {
-	query := `
-		UPDATE products 
-		SET reserved_qty = reserved_qty - $1, updated_at = NOW()
-		WHERE id = $2 AND reserved_qty >= $1
-	`
-	res, err := r.db.ExecContext(ctx, query, qty, id)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to release stock", zap.Error(err))
-		return pkgerrors.ErrInternal
-	}
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		// Should not happen if logic is correct, but safety check
-		return pkgerrors.ErrInternal
-	}
-	return nil
-}
-
-func (r *postgresRepository) ConfirmStock(ctx context.Context, id int64, qty int) error {
-	// Confirm means we permanently remove from global stock and reduce reserved
-	query := `
-		UPDATE products 
-		SET total_qty = total_qty - $1, reserved_qty = reserved_qty - $1, updated_at = NOW()
-		WHERE id = $2 AND reserved_qty >= $1
-	`
-	res, err := r.db.ExecContext(ctx, query, qty, id)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to confirm stock", zap.Error(err))
-		return pkgerrors.ErrInternal
-	}
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		return pkgerrors.ErrInternal
-	}
-	return nil
-}
-
-func (r *postgresRepository) GetAll(ctx context.Context) ([]*domain.Product, error) {
-	query := `SELECT id, sku, name, description, price, total_qty, reserved_qty, is_active, created_at, updated_at FROM products`
-
-	rows, err := r.db.QueryContext(ctx, query)
-	if err != nil {
-		logger.FromContext(ctx).Error("failed to get all products", zap.Error(err))
-		return nil, pkgerrors.ErrInternal
-	}
-	defer rows.Close()
-
-	var products []*domain.Product
-	for rows.Next() {
-		p := &domain.Product{}
-		err := rows.Scan(
-			&p.ID, &p.SKU, &p.Name, &p.Description, &p.Price,
-			&p.TotalQty, &p.ReservedQty, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+	for range ticker.C {
+		stats := db.Stats()
+		// Using background context
+		log := logger.FromContext(context.Background())
+		log.Info("DB Connection Pool Stats",
+			zap.Int("open_connections", stats.OpenConnections),
+			zap.Int("in_use", stats.InUse),
+			zap.Int("idle", stats.Idle),
+			zap.Int64("wait_count", stats.WaitCount),
+			zap.Duration("wait_duration", stats.WaitDuration),
+			zap.Int("max_open_connections", stats.MaxOpenConnections),
 		)
-		if err != nil {
-			logger.FromContext(ctx).Error("failed to scan product", zap.Error(err))
-			return nil, pkgerrors.ErrInternal
-		}
-		products = append(products, p)
 	}
-	return products, nil
 }
