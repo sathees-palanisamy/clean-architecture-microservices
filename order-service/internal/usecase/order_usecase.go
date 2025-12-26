@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockery --name OrderUsecase
 type OrderUsecase interface {
 	CreateOrder(ctx context.Context, userID, productID int64, qty int) (*domain.Order, error)
 	GetOrder(ctx context.Context, id int64) (*domain.Order, error)

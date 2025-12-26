@@ -38,7 +38,7 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Basic validation
-	if p.TotalQty < 0 || p.Price < 0 {
+	if p.TotalQty < 0 || p.Price.IsNegative() {
 		h.respondWithError(w, http.StatusBadRequest, "Invalid input")
 		return
 	}

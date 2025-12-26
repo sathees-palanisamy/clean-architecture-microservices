@@ -24,6 +24,7 @@ func (p *Product) AvailableQty() int {
 	return p.TotalQty - p.ReservedQty
 }
 
+//go:generate mockery --name ProductRepository
 type ProductRepository interface {
 	Create(ctx context.Context, p *Product) error
 	GetByID(ctx context.Context, id int64) (*Product, error)

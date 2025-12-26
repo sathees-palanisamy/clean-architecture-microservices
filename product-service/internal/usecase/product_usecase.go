@@ -7,6 +7,7 @@ import (
 	"github.com/user/go-microservices/product-service/internal/domain"
 )
 
+//go:generate mockery --name ProductUsecase
 type ProductUsecase interface {
 	CreateProduct(ctx context.Context, p *domain.Product) error
 	GetProduct(ctx context.Context, id int64) (*domain.Product, error)

@@ -86,6 +86,7 @@ func (o *Order) Cancel() error {
 	return nil
 }
 
+//go:generate mockery --name OrderRepository
 type OrderRepository interface {
 	Create(ctx context.Context, order *Order) error
 	GetByID(ctx context.Context, id int64) (*Order, error)
@@ -93,6 +94,7 @@ type OrderRepository interface {
 	UpdateStatus(ctx context.Context, id int64, status OrderStatus, paymentStatus PaymentStatus) error
 }
 
+//go:generate mockery --name ProductClient
 type ProductClient interface {
 	GetProduct(ctx context.Context, id int64) (*ProductView, error)
 	ReserveStock(ctx context.Context, id int64, qty int) error
