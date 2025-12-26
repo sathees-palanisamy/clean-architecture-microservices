@@ -46,23 +46,19 @@ func (u *orderUsecase) CreateOrder(ctx context.Context, userID, productID int64,
 		return nil, err
 	}
 
-	// 3. Create Order
-	totalPrice := product.Price * float64(qty)
-	order := &domain.Order{
-		UserID:        userID,
-		ProductID:     productID,
-		ProductName:   product.Name,
-		UnitPrice:     product.Price,
-		Quantity:      qty,
-		TotalPrice:    totalPrice,
-		OrderStatus:   domain.OrderPending,
-		PaymentStatus: domain.PaymentPending,
+	// 3. Create Order Aggregate
+	order, err := domain.NewOrder(userID, productID, product.Name, product.Price, qty)
+	if err != nil {
+		// Rollback: Release Stock
+		logger.FromContext(ctx).Warn("invalid order parameters, rolling back stock", zap.Int64("product_id", productID))
+		if rbErr := u.productClient.ReleaseStock(context.Background(), productID, qty); rbErr != nil {
+			logger.FromContext(ctx).Error("failed to rollback stock", zap.Error(rbErr))
+		}
+		return nil, err
 	}
 
 	if err := u.repo.Create(ctx, order); err != nil {
 		// Rollback: Release Stock
-		// Note: In a real system, this rollback should be robust (e.g. background worker)
-		// because if this fails, we have inconsistent state.
 		logger.FromContext(ctx).Warn("rolling back stock reservation due to order creation failure", zap.Int64("product_id", productID))
 		if rbErr := u.productClient.ReleaseStock(context.Background(), productID, qty); rbErr != nil {
 			logger.FromContext(ctx).Error("failed to rollback stock", zap.Error(rbErr))
