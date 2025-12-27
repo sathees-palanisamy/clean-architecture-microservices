@@ -15,6 +15,7 @@ type OrderUsecase interface {
 	CreateOrder(ctx context.Context, userID, productID int64, qty int) (*domain.Order, error)
 	GetOrder(ctx context.Context, id int64) (*domain.Order, error)
 	GetAllOrders(ctx context.Context) ([]*domain.Order, error)
+	CancelOrder(ctx context.Context, id int64) error
 }
 
 type orderUsecase struct {
@@ -80,4 +81,22 @@ func (u *orderUsecase) GetAllOrders(ctx context.Context) ([]*domain.Order, error
 	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
 	defer cancel()
 	return u.repo.GetAll(ctx)
+}
+
+func (u *orderUsecase) CancelOrder(ctx context.Context, id int64) error {
+	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
+	defer cancel()
+
+	order, err := u.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := order.Cancel(); err != nil {
+		return err
+	}
+
+	// In a real scenario, we might want to release stock here too.
+	// For this exercise, we'll just focus on the state transition.
+	return nil
 }

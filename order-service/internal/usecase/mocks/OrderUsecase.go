@@ -14,6 +14,24 @@ type OrderUsecase struct {
 	mock.Mock
 }
 
+// CancelOrder provides a mock function with given fields: ctx, id
+func (_m *OrderUsecase) CancelOrder(ctx context.Context, id int64) error {
+	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CancelOrder")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64) error); ok {
+		r0 = rf(ctx, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CreateOrder provides a mock function with given fields: ctx, userID, productID, qty
 func (_m *OrderUsecase) CreateOrder(ctx context.Context, userID int64, productID int64, qty int) (*domain.Order, error) {
 	ret := _m.Called(ctx, userID, productID, qty)
