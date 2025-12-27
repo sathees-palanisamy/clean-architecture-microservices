@@ -1,4 +1,4 @@
-.PHONY: build run up down clean check-quality test test-verbose generate test-integration load-test
+.PHONY: build run up down clean check-quality test test-verbose generate test-integration load-test smoke-test stress-test soak-test spike-test contract-test benchmark-test fault-test
 
 build:
 	go build -o bin/product-service ./product-service/cmd/product-service/main.go
@@ -48,3 +48,24 @@ test-integration:
 
 load-test:
 	k6 run tests/load/load_test.js
+
+smoke-test:
+	k6 run tests/load/scenarios/smoke.js
+
+stress-test:
+	k6 run tests/load/scenarios/stress.js
+
+soak-test:
+	k6 run tests/load/scenarios/soak.js
+
+spike-test:
+	k6 run tests/load/scenarios/spike.js
+
+contract-test:
+	k6 run tests/load/scenarios/contract.js
+
+benchmark-test:
+	k6 run tests/load/scenarios/benchmark.js
+
+fault-test:
+	k6 run tests/load/scenarios/fault_injection.js
