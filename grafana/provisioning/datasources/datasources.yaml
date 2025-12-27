@@ -4,15 +4,18 @@ datasources:
   - name: Prometheus
     type: prometheus
     url: http://prometheus:9090
+    uid: prometheus
     access: proxy
     isDefault: true
 
   - name: Tempo
     type: tempo
     url: http://tempo:3200
+    uid: tempo
     access: proxy
 
   - name: Loki
     type: loki
     url: http://loki:3100
+    uid: loki
     access: proxy
