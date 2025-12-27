@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: product-service/Dockerfile
     ports:
-      - "8083:8081"
+      - "8081:8081"
     environment:
       - DB_HOST=product-db
       - DB_PORT=5432
@@ -38,7 +38,7 @@ services:
       context: .
       dockerfile: order-service/Dockerfile
     ports:
-      - "8084:8082"
+      - "8082:8082"
     environment:
       - DB_HOST=order-db
       - DB_PORT=5432

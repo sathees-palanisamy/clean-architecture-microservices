@@ -1,4 +1,4 @@
-.PHONY: build run up down clean check-quality test test-verbose generate test-integration
+.PHONY: build run up down clean check-quality test test-verbose generate test-integration load-test
 
 build:
 	go build -o bin/product-service ./product-service/cmd/product-service/main.go
@@ -45,3 +45,6 @@ generate:
 test-integration:
 	cd order-service/internal/integration_test && go test -v .
 	cd product-service/internal/integration_test && go test -v .
+
+load-test:
+	k6 run tests/load/load_test.js
