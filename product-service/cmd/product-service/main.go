@@ -13,12 +13,19 @@ import (
 	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+	_ "github.com/user/go-microservices/product-service/docs" // Generated docs
 	delivery "github.com/user/go-microservices/product-service/internal/delivery/http"
 	repo "github.com/user/go-microservices/product-service/internal/infrastructure/db"
 	"github.com/user/go-microservices/product-service/internal/usecase"
 	"go.uber.org/zap"
 )
 
+// @title Product Service API
+// @version 1.0
+// @description This is a product management service.
+// @host localhost:8081
+// @BasePath /
 func main() {
 	logger.Init()
 	defer logger.FromContext(context.Background()).Sync()
@@ -60,6 +67,9 @@ func main() {
 
 	router := mux.NewRouter()
 	delivery.NewProductHandler(router, productUsecase)
+
+	// Swagger UI
+	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
 	// Server
 	srv := &http.Server{

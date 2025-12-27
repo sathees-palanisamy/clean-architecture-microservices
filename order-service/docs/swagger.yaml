@@ -1,0 +1,146 @@
+basePath: /
+definitions:
+  github_com_user_go-microservices_order-service_internal_domain.Order:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      order_status:
+        $ref: '#/definitions/github_com_user_go-microservices_order-service_internal_domain.OrderStatus'
+      payment_status:
+        $ref: '#/definitions/github_com_user_go-microservices_order-service_internal_domain.PaymentStatus'
+      product_id:
+        type: integer
+      product_name:
+        description: Snapshot
+        type: string
+      quantity:
+        type: integer
+      total_price:
+        $ref: '#/definitions/valueobject.Money'
+      unit_price:
+        allOf:
+        - $ref: '#/definitions/valueobject.Money'
+        description: Snapshot
+      user_id:
+        type: integer
+    type: object
+  github_com_user_go-microservices_order-service_internal_domain.OrderStatus:
+    enum:
+    - PENDING
+    - COMPLETED
+    - CANCELLED
+    type: string
+    x-enum-varnames:
+    - OrderPending
+    - OrderCompleted
+    - OrderCancelled
+  github_com_user_go-microservices_order-service_internal_domain.PaymentStatus:
+    enum:
+    - PENDING
+    - PAID
+    - FAILED
+    type: string
+    x-enum-varnames:
+    - PaymentPending
+    - PaymentPaid
+    - PaymentFailed
+  internal_delivery_http.CreateOrderRequest:
+    properties:
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  valueobject.Money:
+    type: object
+host: localhost:8082
+info:
+  contact: {}
+  description: This is an order management service.
+  title: Order Service API
+  version: "1.0"
+paths:
+  /orders:
+    get:
+      description: Get a list of all orders
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_user_go-microservices_order-service_internal_domain.Order'
+            type: array
+      summary: List all orders
+      tags:
+      - orders
+    post:
+      consumes:
+      - application/json
+      description: Create a new order for a product and user
+      parameters:
+      - description: Order request
+        in: body
+        name: order
+        required: true
+        schema:
+          $ref: '#/definitions/internal_delivery_http.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_user_go-microservices_order-service_internal_domain.Order'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new order
+      tags:
+      - orders
+  /orders/{id}:
+    get:
+      description: Get detailed information about an order by its ID
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_user_go-microservices_order-service_internal_domain.Order'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get an order by ID
+      tags:
+      - orders
+swagger: "2.0"

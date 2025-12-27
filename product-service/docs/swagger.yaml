@@ -1,0 +1,199 @@
+basePath: /
+definitions:
+  github_com_user_go-microservices_product-service_internal_domain.Product:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      price:
+        $ref: '#/definitions/valueobject.Money'
+      reserved_qty:
+        type: integer
+      sku:
+        type: string
+      total_qty:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  internal_delivery_http.StockRequest:
+    properties:
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+    type: object
+  valueobject.Money:
+    type: object
+host: localhost:8081
+info:
+  contact: {}
+  description: This is a product management service.
+  title: Product Service API
+  version: "1.0"
+paths:
+  /products:
+    get:
+      description: Get a list of all products
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_user_go-microservices_product-service_internal_domain.Product'
+            type: array
+      summary: List all products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new product with the provided details
+      parameters:
+      - description: Product object
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_user_go-microservices_product-service_internal_domain.Product'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_user_go-microservices_product-service_internal_domain.Product'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new product
+      tags:
+      - products
+  /products/{id}:
+    get:
+      description: Get detailed information about a product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_user_go-microservices_product-service_internal_domain.Product'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get a product by ID
+      tags:
+      - products
+  /products/confirm:
+    post:
+      consumes:
+      - application/json
+      description: Confirm the reservation and permanently deduct stock
+      parameters:
+      - description: Stock confirmation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_delivery_http.StockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Confirm stock reservation
+      tags:
+      - stock
+  /products/release:
+    post:
+      consumes:
+      - application/json
+      description: Release a previously reserved quantity of stock
+      parameters:
+      - description: Stock release request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_delivery_http.StockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Release reserved stock
+      tags:
+      - stock
+  /products/reserve:
+    post:
+      consumes:
+      - application/json
+      description: Reserve a specific quantity of stock for a given product ID
+      parameters:
+      - description: Stock reservation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_delivery_http.StockRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reserve stock for a product
+      tags:
+      - stock
+swagger: "2.0"

@@ -69,3 +69,8 @@ benchmark-test:
 
 fault-test:
 	k6 run tests/load/scenarios/fault_injection.js
+
+swagger:
+	cd product-service && swag init -g cmd/product-service/main.go -d ./,../pkg --parseDependency --parseInternal
+	cd order-service && swag init -g cmd/order-service/main.go -d ./,../pkg --parseDependency --parseInternal
+	go work sync

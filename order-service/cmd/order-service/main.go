@@ -13,6 +13,8 @@ import (
 	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+	_ "github.com/user/go-microservices/order-service/docs" // Generated docs
 	delivery "github.com/user/go-microservices/order-service/internal/delivery/http"
 	client "github.com/user/go-microservices/order-service/internal/infrastructure/client"
 	repo "github.com/user/go-microservices/order-service/internal/infrastructure/db"
@@ -20,6 +22,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// @title Order Service API
+// @version 1.0
+// @description This is an order management service.
+// @host localhost:8082
+// @BasePath /
 func main() {
 	logger.Init()
 	defer logger.FromContext(context.Background()).Sync()
@@ -61,6 +68,9 @@ func main() {
 
 	router := mux.NewRouter()
 	delivery.NewOrderHandler(router, orderUsecase)
+
+	// Swagger UI
+	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
 	// Server
 	srv := &http.Server{
