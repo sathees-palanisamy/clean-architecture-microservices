@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
+	"github.com/user/go-microservices/pkg/otel"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/user/go-microservices/order-service/docs" // Generated docs
@@ -19,6 +20,7 @@ import (
 	client "github.com/user/go-microservices/order-service/internal/infrastructure/client"
 	repo "github.com/user/go-microservices/order-service/internal/infrastructure/db"
 	"github.com/user/go-microservices/order-service/internal/usecase"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +39,14 @@ func main() {
 	// Config
 	serverPort := config.GetEnv("SERVER_PORT", "8082")
 	productServiceURL := config.GetEnv("PRODUCT_SERVICE_URL", "http://localhost:8081")
+
+	// OTEL
+	otlpEndpoint := config.GetEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+	serviceName := config.GetEnv("OTEL_SERVICE_NAME", "order-service")
+	otelShutdown, err := otel.InitOTEL(context.Background(), serviceName, otlpEndpoint)
+	if err != nil {
+		log.Fatal("Failed to initialize OTEL", zap.Error(err))
+	}
 
 	// DB Connection
 	dbConn, err := repo.NewConnection()
@@ -65,6 +75,7 @@ func main() {
 	orderRepo := repo.NewOrderRepository(dbConn)
 	prodClient := client.NewProductClient(productServiceURL)
 	orderUsecase := usecase.NewOrderUsecase(orderRepo, prodClient, 5*time.Second)
+	orderUsecase = usecase.NewTracingOrderUsecase(orderUsecase)
 
 	router := mux.NewRouter()
 	delivery.NewOrderHandler(router, orderUsecase)
@@ -72,10 +83,13 @@ func main() {
 	// Swagger UI
 	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
+	// Wrap router with OTEL middleware
+	otelHandler := otelhttp.NewHandler(router, "order-service-http")
+
 	// Server
 	srv := &http.Server{
 		Addr:    ":" + serverPort,
-		Handler: router,
+		Handler: otelHandler,
 	}
 
 	go func() {
@@ -97,5 +111,10 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown", zap.Error(err))
 	}
+
+	if err := otelShutdown(ctx); err != nil {
+		log.Error("Failed to shutdown OTEL", zap.Error(err))
+	}
+
 	log.Info("Server exiting")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -35,13 +36,22 @@ func Debug(msg string, fields ...zap.Field) {
 }
 
 func FromContext(ctx context.Context) *zap.Logger {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	currLog := log
 	if l, ok := ctx.Value(LoggerKey).(*zap.Logger); ok {
-		return l
+		currLog = l
 	}
-	return log
+
+	if spanCtx.IsValid() {
+		return currLog.With(
+			zap.String("trace_id", spanCtx.TraceID().String()),
+			zap.String("span_id", spanCtx.SpanID().String()),
+		)
+	}
+	return currLog
 }
 
 func WithContext(ctx context.Context, fields ...zap.Field) context.Context {
-	l := log.With(fields...)
+	l := FromContext(ctx).With(fields...)
 	return context.WithValue(ctx, LoggerKey, l)
 }

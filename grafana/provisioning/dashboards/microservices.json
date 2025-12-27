@@ -1,0 +1,131 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_duration_count{http_status_code=~\"5..\"}[5m])) / sum(rate(http_server_duration_count[5m])) > 0.05",
+          "legendFormat": "{{service_name}} Error Rate > 5%"
+        }
+      ],
+      "alert": {
+        "conditions": [
+          {
+            "evaluator": { "params": [0.05], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "name": "High Error Rate Alert (> 5%)",
+        "for": "2m"
+      }
+    },
+    {
+      "title": "HTTP Latency (P95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_bucket[5m])) by (le, service_name))",
+          "legendFormat": "{{service_name}} P95"
+        }
+      ],
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": { "params": [500], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "5m",
+        "frequency": "1m",
+        "handler": 1,
+        "name": "High HTTP Latency Alert (P95 > 500ms)",
+        "noDataState": "ok",
+        "notifications": []
+      }
+    },
+    {
+      "title": "DB Connection Pool (Current)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "db_sql_connections_open / 25 > 0.9",
+          "legendFormat": "{{service_name}} DB Saturation > 90%"
+        }
+      ],
+      "alert": {
+        "conditions": [
+          {
+            "evaluator": { "params": [0.9], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "name": "DB Connection Saturation Alert (> 90%)",
+        "for": "1m"
+      }
+    },
+    {
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "process_cpu_usage",
+          "legendFormat": "{{service_name}} CPU"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["microservices", "otel"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Microservices Observability",
+  "uid": "otel-microservices",
+  "version": 1,
+  "weekStart": ""
+}

@@ -7,8 +7,10 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +38,10 @@ func NewConnection() (*sql.DB, error) {
 			host, port, user, pass, dbname, sslmode)
 	}
 
-	db, err := sql.Open("postgres", dsn)
+	db, err := otelsql.Open("postgres", dsn,
+		otelsql.WithAttributes(semconv.DBSystemPostgreSQL),
+		otelsql.WithDBName(config.GetEnv("DB_NAME", "order_db")),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}

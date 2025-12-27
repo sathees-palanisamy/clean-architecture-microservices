@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: product-service
+        image: product-service:latest
+        env:
+        - name: OTEL_SERVICE_NAME
+          value: "product-service"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "localhost:4317"
+        # ... other env vars ...
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:latest
+        command:
+        - "/otelcol-contrib"
+        - "--config=/etc/otelcol-contrib/config.yaml"
+        volumeMounts:
+        - name: otel-collector-config-vol
+          mountPath: /etc/otelcol-contrib
+      volumes:
+      - name: otel-collector-config-vol
+        configMap:
+          name: otel-collector-conf
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-conf
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+    processors:
+      batch:
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+      logging:
+        loglevel: debug
+      otlp:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [otlp, logging]
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheus, logging]

@@ -10,6 +10,7 @@ import (
 
 	"github.com/user/go-microservices/order-service/internal/domain"
 	pkgerrors "github.com/user/go-microservices/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type productClient struct {
@@ -21,7 +22,8 @@ func NewProductClient(baseURL string) domain.ProductClient {
 	return &productClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+			Timeout:   5 * time.Second,
 		},
 	}
 }

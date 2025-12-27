@@ -12,12 +12,14 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/user/go-microservices/pkg/config"
 	"github.com/user/go-microservices/pkg/logger"
+	"github.com/user/go-microservices/pkg/otel"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 	_ "github.com/user/go-microservices/product-service/docs" // Generated docs
 	delivery "github.com/user/go-microservices/product-service/internal/delivery/http"
 	repo "github.com/user/go-microservices/product-service/internal/infrastructure/db"
 	"github.com/user/go-microservices/product-service/internal/usecase"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +37,14 @@ func main() {
 
 	// Config
 	serverPort := config.GetEnv("SERVER_PORT", "8081")
+
+	// OTEL
+	otlpEndpoint := config.GetEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+	serviceName := config.GetEnv("OTEL_SERVICE_NAME", "product-service")
+	otelShutdown, err := otel.InitOTEL(context.Background(), serviceName, otlpEndpoint)
+	if err != nil {
+		log.Fatal("Failed to initialize OTEL", zap.Error(err))
+	}
 
 	// DB Connection
 	dbConn, err := repo.NewConnection()
@@ -64,6 +74,7 @@ func main() {
 	// Layers
 	productRepo := repo.NewPostgresRepository(dbConn)
 	productUsecase := usecase.NewProductUsecase(productRepo, 2*time.Second)
+	productUsecase = usecase.NewTracingProductUsecase(productUsecase)
 
 	router := mux.NewRouter()
 	delivery.NewProductHandler(router, productUsecase)
@@ -71,10 +82,13 @@ func main() {
 	// Swagger UI
 	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
+	// Wrap handler with OTEL
+	otelHandler := otelhttp.NewHandler(router, "product-service-http")
+
 	// Server
 	srv := &http.Server{
 		Addr:    ":" + serverPort,
-		Handler: router,
+		Handler: otelHandler,
 	}
 
 	go func() {
@@ -96,5 +110,10 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown", zap.Error(err))
 	}
+
+	if err := otelShutdown(ctx); err != nil {
+		log.Error("Failed to shutdown OTEL", zap.Error(err))
+	}
+
 	log.Info("Server exiting")
 }
